@@ -1,0 +1,219 @@
+{% extends "authenticated-base.html" %}
+{% block title %}Leaderboard | Student Awards{% endblock %}
+
+{% block subpage_content %}
+{% macro rank_marker(rank) %}
+  {% if rank == 1 %}<span class="material-symbols-outlined rank-medal rank-gold" role="img" aria-label="Rank 1">emoji_events</span>
+  {% elif rank == 2 %}<span class="material-symbols-outlined rank-medal rank-silver" role="img" aria-label="Rank 2">workspace_premium</span>
+  {% elif rank == 3 %}<span class="material-symbols-outlined rank-medal rank-bronze" role="img" aria-label="Rank 3">military_tech</span>
+  {% else %}{{ rank }}.{% endif %}
+{% endmacro %}
+<main class="leaderboard-page">
+  <section class="leaderboard-frame" aria-labelledby="leaderboard-heading">
+    <h1 class="leaderboard-title" id="leaderboard-heading">Leaderboards</h1>
+    <div class="leaderboard-ranking" id="leaderboardFrame" data-total-students="{{ total_students }}">
+    <ol class="leaderboard-list {{ 'is-windowed' if total_students > 9 }}" id="leaderboardList" aria-label="Students ranked by approved volunteer hours">
+      {% for student in ranked_students %}
+      <li class="leaderboard-row {{ 'is-current' if student.id == user.id else '' }}" id="leaderboard-row-{{ student.id }}" data-student-id="{{ student.id }}" data-rank="{{ student.rank }}">
+        <span class="leaderboard-rank">{{ rank_marker(student.rank) }}</span>
+        <span class="leaderboard-name">{{ student.username }}</span>
+        <span class="leaderboard-hours">{{ "%.0f"|format(student.approved_hours) }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if total_students > 9 and not current_student_in_top_nine %}
+    <div class="leaderboard-row leaderboard-current-rank is-current" id="currentStudentFloat" aria-label="Your current rank">
+        <span class="leaderboard-rank">{{ rank_marker(current_student.rank) }}</span>
+        <span class="leaderboard-name">{{ current_student.username }}</span>
+        <span class="leaderboard-hours">{{ "%.0f"|format(current_student.approved_hours) }}</span>
+    </div>
+    {% endif %}
+    <button class="leaderboard-jump" id="leaderboardJump" type="button" aria-label="Jump to your rank" title="Jump to your rank" hidden>
+      <span class="material-symbols-outlined" id="leaderboardJumpIcon" aria-hidden="true">keyboard_arrow_down</span>
+    </button>
+    </div>
+
+    <section class="milestone-panel" aria-labelledby="milestones-heading">
+      <h2 id="milestones-heading">Milestones</h2>
+      <div class="milestone-scroll" id="milestoneScroll" data-start-index="{{ milestone_start_index }}" aria-label="Milestone carousel">
+        <div class="milestone-grid" id="milestoneGrid">
+        {% for milestone in milestones %}
+        <div class="milestone-item" title="{{ milestone.name }}: {{ milestone.reward }} points">
+          <span class="milestone-badge">
+            <span class="material-symbols-outlined" aria-hidden="true">{{ milestone.badge_icon }}</span>
+            {% if milestone.unlocked %}<span class="material-symbols-outlined milestone-check" aria-label="Claimed">check</span>{% endif %}
+          </span>
+          <span>{{ milestone.threshold }}</span>
+        </div>
+        {% endfor %}
+        </div>
+      </div>
+      <div class="milestone-toolbar">
+        <button class="milestone-step" id="milestonePrevious" type="button" aria-label="Previous milestones" title="Previous milestones">
+          <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+        </button>
+        <button class="milestone-return" id="milestoneReturn" type="button" aria-label="Return to current milestones" title="Return to current milestones" hidden>
+          <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+        </button>
+        <button class="milestone-step" id="milestoneNext" type="button" aria-label="Next milestones" title="Next milestones">
+          <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+        </button>
+      </div>
+      <div class="milestone-progress" role="progressbar" aria-label="Progress to next milestone"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}">
+        <span style="width: {{ progress_percent }}%"></span>
+      </div>
+      <p class="milestone-progress-label">
+        {{ "%.0f"|format(approved_hours) }}/{{ next_milestone if next_milestone else 100 }}
+      </p>
+    </section>
+  </section>
+</main>
+{% endblock %}
+
+{% block subpage_scripts %}
+<script>
+  const milestoneScroll = document.getElementById("milestoneScroll");
+  const milestoneGrid = document.getElementById("milestoneGrid");
+  const milestoneReturn = document.getElementById("milestoneReturn");
+  const milestonePrevious = document.getElementById("milestonePrevious");
+  const milestoneNext = document.getElementById("milestoneNext");
+  if (milestoneScroll && milestoneGrid && milestoneReturn && milestonePrevious && milestoneNext) {
+    const startingIndex = Number(milestoneScroll.dataset.startIndex || 0);
+    const milestoneItems = milestoneGrid.querySelectorAll(".milestone-item");
+    let currentIndex = startingIndex;
+    let itemStep = 0;
+    let dragOffset = 0;
+    let pointerStartX = 0;
+    let dragStartIndex = 0;
+    let isDragging = false;
+
+    const maxIndex = () => Math.max(0, milestoneItems.length - 3);
+    const clampIndex = (index) => Math.max(0, Math.min(maxIndex(), index));
+    const updateControls = (offset = -currentIndex * itemStep) => {
+      milestonePrevious.disabled = currentIndex <= 0;
+      milestoneNext.disabled = currentIndex >= maxIndex();
+      milestoneReturn.hidden = Math.abs(offset + startingIndex * itemStep) < 4;
+    };
+    const positionTrack = (index, animate = true) => {
+      currentIndex = clampIndex(index);
+      milestoneGrid.classList.toggle("is-dragging", !animate);
+      dragOffset = -currentIndex * itemStep;
+      milestoneGrid.style.transform = `translate3d(${dragOffset}px, 0, 0)`;
+      updateControls();
+    };
+
+    const positionCurrentMilestones = () => {
+      const gap = Number.parseFloat(getComputedStyle(milestoneGrid).gap || "0");
+      const itemWidth = Math.max(48, (milestoneScroll.clientWidth - gap * 2) / 3);
+      milestoneGrid.style.setProperty("--milestone-item-width", `${itemWidth}px`);
+      itemStep = itemWidth + gap;
+      positionTrack(currentIndex);
+    };
+
+    requestAnimationFrame(positionCurrentMilestones);
+    new ResizeObserver(() => requestAnimationFrame(positionCurrentMilestones)).observe(milestoneScroll);
+    milestoneScroll.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+      isDragging = true;
+      pointerStartX = event.clientX;
+      dragStartIndex = currentIndex;
+      dragOffset = -currentIndex * itemStep;
+      milestoneScroll.classList.add("is-dragging");
+      milestoneGrid.classList.add("is-dragging");
+      milestoneScroll.setPointerCapture(event.pointerId);
+    });
+    milestoneScroll.addEventListener("pointermove", (event) => {
+      if (!isDragging) return;
+      const requestedOffset = -dragStartIndex * itemStep + event.clientX - pointerStartX;
+      dragOffset = Math.max(-maxIndex() * itemStep, Math.min(0, requestedOffset));
+      milestoneGrid.style.transform = `translate3d(${dragOffset}px, 0, 0)`;
+      updateControls(dragOffset);
+    });
+    const finishDragging = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      milestoneScroll.classList.remove("is-dragging");
+      positionTrack(Math.round(-dragOffset / itemStep));
+    };
+    milestoneScroll.addEventListener("pointerup", finishDragging);
+    milestoneScroll.addEventListener("pointercancel", finishDragging);
+    milestonePrevious.addEventListener("click", () => positionTrack(currentIndex - 1));
+    milestoneNext.addEventListener("click", () => positionTrack(currentIndex + 1));
+    milestoneReturn.addEventListener("click", () => positionTrack(startingIndex));
+  }
+
+  const leaderboardFrame = document.getElementById("leaderboardFrame");
+  const leaderboardList = document.getElementById("leaderboardList");
+  const currentStudentFloat = document.getElementById("currentStudentFloat");
+  const leaderboardJump = document.getElementById("leaderboardJump");
+  const leaderboardJumpIcon = document.getElementById("leaderboardJumpIcon");
+  const currentStudentRow = leaderboardList?.querySelector('[data-student-id="{{ user.id }}"]');
+
+  if (leaderboardFrame && leaderboardList && leaderboardJump && currentStudentRow) {
+    const totalStudents = Number(leaderboardFrame.dataset.totalStudents);
+    const updateLeaderboardJump = () => {
+      const viewport = leaderboardList.getBoundingClientRect();
+      const student = currentStudentRow.getBoundingClientRect();
+      const isVisible = student.bottom > viewport.top && student.top < viewport.bottom;
+      if (currentStudentFloat) currentStudentFloat.hidden = isVisible;
+      if (totalStudents <= 9 || isVisible) {
+        leaderboardJump.hidden = true;
+        return;
+      }
+      const studentIsAbove = student.bottom <= viewport.top;
+      leaderboardJump.hidden = false;
+      leaderboardJump.classList.toggle("is-above", studentIsAbove);
+      leaderboardJumpIcon.textContent = studentIsAbove ? "keyboard_arrow_up" : "keyboard_arrow_down";
+    };
+
+    leaderboardList.classList.toggle("is-windowed", totalStudents > 9);
+    leaderboardList.addEventListener("scroll", updateLeaderboardJump, { passive: true });
+    window.addEventListener("resize", updateLeaderboardJump);
+    leaderboardJump.addEventListener("click", () => {
+      const listBox = leaderboardList.getBoundingClientRect();
+      const rowBox = currentStudentRow.getBoundingClientRect();
+      const targetTop = leaderboardList.scrollTop + rowBox.top - listBox.top;
+      leaderboardList.scrollTo({ top: targetTop, behavior: "smooth" });
+    });
+    requestAnimationFrame(updateLeaderboardJump);
+  }
+
+  const leaderboardAwards = {{ new_awards | tojson }};
+  const leaderboardToast = document.getElementById("appToast");
+  const leaderboardToastClose = document.getElementById("toastClose");
+  if (leaderboardToastClose) {
+    leaderboardToastClose.addEventListener("click", () => {
+      window.clearTimeout(window.leaderboardToastTimer);
+      leaderboardToast?.classList.remove("toast-visible");
+    });
+  }
+  leaderboardAwards.forEach((award, index) => {
+    window.setTimeout(() => {
+      const toast = leaderboardToast;
+      const title = document.getElementById("toastTitle");
+      const message = document.getElementById("toastContent");
+      if (!toast || !title || !message) return;
+      title.textContent = `Milestone (${award.threshold}) claimed successfully!`;
+      const points = document.createElement("span");
+      points.className = "points-inline";
+      points.append(document.createTextNode(String(award.points)));
+      const star = document.createElement("span");
+      star.className = "material-symbols-outlined points-star";
+      star.setAttribute("aria-hidden", "true");
+      star.textContent = "star";
+      points.append(star);
+      message.replaceChildren(
+        document.createTextNode("You have obtained "),
+        points,
+        document.createTextNode("."),
+      );
+      toast.classList.add("toast-visible");
+      window.clearTimeout(window.leaderboardToastTimer);
+      window.leaderboardToastTimer = window.setTimeout(() => {
+        toast.classList.remove("toast-visible");
+      }, 4500);
+    }, index * 4800);
+  });
+</script>
+{% endblock %}

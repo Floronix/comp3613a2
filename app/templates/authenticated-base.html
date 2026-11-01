@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block internal_css %}
+<style>
+    body {
+        overflow-x: clip;
+        background: transparent;
+        color: var(--brand-ink);
+    }
+
+    #wrapper {
+        display: flex;
+        min-height: 100vh;
+        align-items: flex-start;
+    }
+
+    #sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        min-width: 250px;
+        max-width: 250px;
+        height: 100vh;
+        flex-shrink: 0;
+        transition: all 0.3s;
+        background: var(--brand-sidebar);
+        color: #fff;
+    }
+
+    #sidebar.collapsed {
+        margin-left: -250px;
+    }
+
+    #sidebar .nav-link {
+        color: var(--brand-sidebar-text);
+        font-weight: 500;
+    }
+
+    #sidebar .nav-link:hover,
+    #sidebar .nav-link.active {
+        color: #fff;
+        background-color: color-mix(in srgb, var(--brand-accent) 22%, var(--brand-sidebar));
+        border-radius: var(--brand-radius);
+    }
+
+    #sidebar .brand-wordmark {
+        color: #fff;
+        font-size: 1.25rem;
+        text-align: center;
+        margin: 1rem 0 1.5rem;
+    }
+
+    #content {
+        width: 100%;
+        padding: 1rem;
+        transition: all 0.3s;
+        display: flex;
+        flex-direction: column;
+        background: transparent;
+        color: var(--brand-ink);
+    }
+
+    .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        flex-shrink: 0;
+        border-bottom: 1px solid #343b36;
+        background-color: var(--brand-surface) !important;
+    }
+
+    .sidebar-backdrop {
+        display: none;
+    }
+
+    @media (max-width: 767px) {
+        #wrapper {
+            display: block;
+            width: 100%;
+            min-width: 0;
+        }
+
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1040;
+            width: min(18rem, 84vw);
+            min-width: 0;
+            max-width: none;
+            height: 100vh;
+            height: 100dvh;
+            transform: translateX(-102%);
+            transition: transform 0.22s ease;
+        }
+
+        #sidebar.mobile-open {
+            transform: translateX(0);
+        }
+
+        #sidebar.collapsed {
+            margin-left: 0;
+            transform: translateX(-102%);
+        }
+
+        .sidebar-backdrop:not([hidden]) {
+            position: fixed;
+            inset: 0;
+            z-index: 1030;
+            display: block;
+            background: rgba(0, 0, 0, 0.64);
+        }
+
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        #content {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            padding: 0.5rem;
+            overflow-x: clip;
+        }
+
+        .navbar {
+            width: 100%;
+            min-height: 3.5rem;
+            padding-inline: 0.5rem !important;
+        }
+
+        .navbar .btn {
+            min-width: 44px;
+            min-height: 44px;
+        }
+    }
+</style>
+{% block additional_styles %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div id="wrapper">
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+    <nav id="sidebar" class="p-3 d-flex flex-column vh-100">
+        <a class="brand-wordmark sidebar-brand" href="{{ url_for('index_view') }}">Student Awards</a>
+
+        <ul class="nav nav-pills flex-column gap-2 flex-grow-1">
+            {% if user.role == "admin" %}
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/admin') }}" href="{{ url_for('admin_home_view') }}">
+                    Review queue
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/prizes') }}" href="{{ url_for('prizes_view') }}">
+                    Prize redemptions
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path == '/app' }}" href="{{ url_for('user_home_view') }}">
+                    Volunteer hours
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/my-activities') }}" href="{{ url_for('my_activities_view') }}">
+                    My Activities
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/leaderboard') }}" href="{{ url_for('leaderboard_view') }}">
+                    Leaderboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if request.url.path.startswith('/prizes') }}" href="{{ url_for('prizes_view') }}">
+                    Prizes
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item mt-auto">
+                <a class="nav-link" href="{{ url_for('index_view') }}">
+                    <span class="material-symbols-outlined me-2" aria-hidden="true">home</span>
+                    Landing page
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-danger" href="{{ url_for('logout') }}">Sign out</a>
+            </li>
+        </ul>
+    </nav>
+
+    <div id="content">
+        <nav class="navbar navbar-expand-lg bg-white mb-4 px-3 rounded-3 shadow-sm">
+            <button class="btn btn-outline-secondary menu-toggle" id="menu-toggle" type="button" aria-label="Toggle sidebar" title="Toggle sidebar">
+                <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+            </button>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <span class="fw-semibold">Welcome, {{ user.username }}</span>
+            </div>
+        </nav>
+
+        <div class="row">
+            <div class="col-12">
+                {% for message in get_flashed_messages(request) %}
+                <div class="alert alert-{{ message.type }}" role="alert">{{ message.message }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% block subpage_content %}{% endblock %}
+    </div>
+</div>
+
+<script>
+    const sidebar = document.getElementById("sidebar");
+    const menuToggle = document.getElementById("menu-toggle");
+    const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+    const mobileLayout = window.matchMedia("(max-width: 767px)");
+
+    function closeMobileSidebar() {
+        sidebar.classList.remove("mobile-open");
+        sidebarBackdrop.hidden = true;
+        document.body.classList.remove("sidebar-open");
+        menuToggle.setAttribute("aria-expanded", "false");
+    }
+
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.addEventListener("click", function () {
+        if (mobileLayout.matches) {
+            const isOpen = sidebar.classList.toggle("mobile-open");
+            sidebarBackdrop.hidden = !isOpen;
+            document.body.classList.toggle("sidebar-open", isOpen);
+            menuToggle.setAttribute("aria-expanded", String(isOpen));
+            return;
+        }
+        sidebar.classList.toggle("collapsed");
+    });
+    sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+    window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMobileSidebar();
+    });
+    mobileLayout.addEventListener("change", () => {
+        sidebar.classList.remove("collapsed", "mobile-open");
+        closeMobileSidebar();
+    });
+</script>
+{% block subpage_scripts %}{% endblock %}
+{% endblock %}
